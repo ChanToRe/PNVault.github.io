@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hanseong C14 Database</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Leaflet CSS (Map) -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    
+    <style>
+        /* 커스텀 스타일: 테이블 헤더 고정 및 스크롤바 */
+        .table-container {
+            height: calc(100vh - 64px);
+        }
+        thead th {
+            position: sticky;
+            top: 0;
+            background-color: #f3f4f6;
+            z-index: 10;
+            box-shadow: 0 2px 2px -1px rgba(0, 0, 0, 0.1);
+        }
+        /* 지도 컨테이너 높이 */
+        #map {
+            height: calc(100vh - 64px);
+            z-index: 1;
+        }
+        /* 마커 선택시 테이블 행 강조 */
+        .selected-row {
+            background-color: #fef08a !important; /* Tailwind yellow-200 */
+        }
+    </style>
+</head>
+<body class="bg-gray-50 overflow-hidden text-sm">
+
+    <!-- 상단 네비게이션 헤더 -->
+    <header class="bg-white shadow-md h-16 flex items-center justify-between px-6 z-50 relative">
+        <!-- 좌측 로고 -->
+        <div class="flex items-center gap-2 h-full py-2">
+            <!-- 국립서울문화유산연구소 로고 (SVG 실패시 PNG 시도, 모두 실패시 텍스트 표출) -->
+            <img src="https://github.com/user-attachments/assets/2b251749-6588-43bc-9011-0ed9a60c2226" 
+                 onerror="this.onerror=null; this.src='https://www.nrich.go.kr/images/common/logo.png'; this.addEventListener('error', function() { this.classList.add('hidden'); document.getElementById('fallback-text').classList.remove('hidden'); });"
+                 alt="국립서울문화유산연구소 로고" 
+                 class="h-full max-h-12 object-contain cursor-pointer"
+                 onclick="switchTab('intro')">
+            <span id="fallback-text" class="hidden text-xl font-bold text-gray-800 tracking-tight">국립서울문화유산연구소</span>
+        </div>
+        
+        <!-- 우측 메뉴 -->
+        <nav class="flex gap-6">
+            <button onclick="switchTab('intro')" class="nav-btn text-gray-500 hover:text-blue-600 font-medium transition-colors" data-target="intro">소개</button>
+            <button onclick="switchTab('database')" class="nav-btn text-blue-600 font-bold border-b-2 border-blue-600 transition-colors" data-target="database">데이터베이스</button>
+            <button onclick="switchTab('contact')" class="nav-btn text-gray-500 hover:text-blue-600 font-medium transition-colors" data-target="contact">문의</button>
+        </nav>
+    </header>
+
+    <!-- 메인 컨텐츠 영역 -->
+    <main class="w-full relative">
+        
+        <!-- 1. 소개 탭 -->
+        <section id="tab-intro" class="hidden p-8 h-[calc(100vh-64px)] overflow-auto bg-white">
+            <div class="max-w-3xl mx-auto">
+                <h2 class="text-3xl font-bold mb-4">풍납토성 출토 시료 데이터베이스/h2>
+                <p class="text-gray-600 mb-4 leading-relaxed">
+                    이 페이지는 풍납토성에서 수습된 시료를 모아놓은 데이터베이스입니다. 
+                    데이터베이스 탭으로 이동하여 지도와 스프레드시트를 통해 전체 데이터를 시각적으로 확인할 수 있습니다.
+                </p>
+                <div class="p-6 bg-blue-50 rounded-xl mt-8">
+                    <h3 class="text-lg font-bold text-blue-800 mb-2">업데이트 정보</h3>
+                    <p class="text-blue-600">최신 데이터 셋이 반영되어 있습니다. (GitHub 연동)</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- 2. 데이터베이스 탭 (메인 화면: 2분할) -->
+        <section id="tab-database" class="flex w-full table-container">
+            <!-- 좌측 지도 영역 -->
+            <div class="w-1/2 h-full border-r border-gray-300 relative">
+                <div id="map"></div>
+                <!-- 로딩 오버레이 -->
+                <div id="loading" class="absolute inset-0 bg-white/80 z-20 flex flex-col items-center justify-center">
+                    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
+                    <p class="text-gray-700 font-medium text-lg">데이터베이스를 불러오는 중입니다...</p>
+                </div>
+            </div>
+            
+            <!-- 우측 스프레드시트 영역 -->
+            <div class="w-1/2 h-full overflow-auto bg-white relative">
+                <table class="w-full text-left border-collapse whitespace-nowrap">
+                    <thead id="table-head">
+                        <!-- 자바스크립트로 헤더 자동 생성 -->
+                    </thead>
+                    <tbody id="table-body" class="divide-y divide-gray-200">
+                        <!-- 자바스크립트로 데이터 자동 생성 -->
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- 3. 문의 탭 -->
+        <section id="tab-contact" class="hidden p-8 h-[calc(100vh-64px)] overflow-auto bg-white">
+            <div class="max-w-3xl mx-auto">
+                <h2 class="text-3xl font-bold mb-6">문의 및 찾아오시는 길</h2>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div class="bg-gray-50 p-6 rounded-xl border border-gray-200">
+                        <h3 class="text-xl font-bold mb-4 flex items-center gap-2">
+                            <svg class="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+                            이메일 문의
+                        </h3>
+                        <p class="text-gray-600 mb-2">문의는 아래 이메일로 연락 바랍니다.</p>
+                        <a href="mailto:chanhyeok@korea.kr" class="text-blue-600 font-bold hover:underline">chanhyeok@korea.kr</a>
+                    </div>
+                    
+                    <div class="bg-gray-50 p-6 rounded-xl border border-gray-200">
+                        <h3 class="text-xl font-bold mb-4 flex items-center gap-2">
+                            <svg class="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                            연구실 위치
+                        </h3>
+                        <p class="text-gray-600 mb-1">서울특별시 송파구 풍성로 14길 45</p>
+                        <p class="text-gray-600">국립서울문화유산연구소 풍납토성발굴조사단</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Scripts -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <!-- Proj4js (좌표계 변환 라이브러리) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.0/proj4.js"></script>
+    
+    <script>
+        // 전역 변수
+        let map;
+        let markers = []; 
+        let highlightMarker = null; 
+        let tableRows = []; 
+
+        const CSV_URL = "https://raw.githubusercontent.com/ChanToRe/Hanseong_C14/main/Data/AMS_Master_ko.csv";
+
+        // EPSG:5186 좌표계 정의 (Korea 2000 / Central Belt 2010)
+        proj4.defs("EPSG:5186", "+proj=tmerc +lat_0=38 +lon_0=127 +k=1 +x_0=200000 +y_0=600000 +ellps=GRS80 +units=m +no_defs");
+
+        // 1. 탭 전환 기능
+        function switchTab(tabId) {
+            document.querySelectorAll('main > section').forEach(section => {
+                section.classList.add('hidden');
+            });
+            const activeTab = document.getElementById(`tab-${tabId}`);
+            if(activeTab) {
+                activeTab.classList.remove('hidden');
+                if(tabId === 'database' && map) {
+                    setTimeout(() => map.invalidateSize(), 100);
+                }
+            }
+
+            document.querySelectorAll('.nav-btn').forEach(btn => {
+                if(btn.dataset.target === tabId) {
+                    btn.classList.add('text-blue-600', 'font-bold', 'border-b-2', 'border-blue-600');
+                    btn.classList.remove('text-gray-500', 'font-medium');
+                } else {
+                    btn.classList.remove('text-blue-600', 'font-bold', 'border-b-2', 'border-blue-600');
+                    btn.classList.add('text-gray-500', 'font-medium');
+                }
+            });
+        }
+
+        // 2. 지도 초기화
+        function initMap() {
+            map = L.map('map').setView([37.5, 127.0], 10); // 기본 중심: 서울
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; OpenStreetMap contributors'
+            }).addTo(map);
+        }
+
+        // 3. Easting/Northing 컬럼 찾기
+        function findCoordinateColumns(headers) {
+            // 정규식을 사용해 대소문자 구분없이 Easting, Northing, 또는 X, Y 가 포함된 열 찾기
+            let xCol = headers.find(h => /easting|x/i.test(h));
+            let yCol = headers.find(h => /northing|y/i.test(h));
+            return { x: xCol, y: yCol };
+        }
+
+        // 4. 깜빡이는 마커 생성 (Tailwind CSS 애니메이션)
+        const getBlinkingIcon = () => {
+            return L.divIcon({
+                className: 'custom-blinking-icon',
+                html: `<div class="relative flex h-6 w-6 transform -translate-x-1/2 -translate-y-1/2">
+                          <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75"></span>
+                          <span class="relative inline-flex rounded-full h-6 w-6 bg-yellow-400 border-2 border-yellow-600 shadow-lg"></span>
+                       </div>`,
+                iconSize: [0, 0], 
+            });
+        };
+
+        // 5. 테이블 행 클릭 이벤트
+        function onRowClick(lat, lon, index) {
+            if(!lat || !lon || isNaN(lat) || isNaN(lon)) {
+                alert("해당 시료는 유효한 위치 좌표가 없습니다.");
+                return;
+            }
+
+            if(highlightMarker) {
+                map.removeLayer(highlightMarker);
+            }
+
+            tableRows.forEach(tr => tr.classList.remove('selected-row'));
+            if(tableRows[index]) {
+                tableRows[index].classList.add('selected-row');
+                tableRows[index].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+
+            highlightMarker = L.marker([lat, lon], { icon: getBlinkingIcon(), zIndexOffset: 1000 }).addTo(map);
+            map.flyTo([lat, lon], 14, { duration: 0.5 });
+        }
+
+        // 6. 데이터 로드 및 렌더링
+        function loadData() {
+            Papa.parse(CSV_URL, {
+                download: true,
+                header: true,
+                skipEmptyLines: true,
+                complete: function(results) {
+                    document.getElementById('loading').style.display = 'none';
+                    const data = results.data;
+                    const headers = results.meta.fields;
+
+                    if(data.length === 0) return;
+
+                    const { x: xCol, y: yCol } = findCoordinateColumns(headers);
+
+                    // --- [1] 스프레드시트 헤더 ---
+                    const thead = document.getElementById('table-head');
+                    const trHead = document.createElement('tr');
+                    
+                    const thIndex = document.createElement('th');
+                    thIndex.className = 'px-4 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider border-b border-gray-200';
+                    thIndex.innerText = 'No.';
+                    trHead.appendChild(thIndex);
+
+                    headers.forEach(header => {
+                        const th = document.createElement('th');
+                        th.className = 'px-4 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider border-b border-gray-200';
+                        th.innerText = header;
+                        trHead.appendChild(th);
+                    });
+                    thead.appendChild(trHead);
+
+                    // --- [2] 스프레드시트 바디 및 지도 마커 ---
+                    const tbody = document.getElementById('table-body');
+                    
+                    data.forEach((row, index) => {
+                        const tr = document.createElement('tr');
+                        tr.className = 'hover:bg-blue-50 cursor-pointer transition-colors';
+                        
+                        // EPSG:5186 (X, Y) -> EPSG:4326 (위경도) 변환
+                        let lat = null, lon = null;
+                        const easting = xCol ? parseFloat(row[xCol]) : null;
+                        const northing = yCol ? parseFloat(row[yCol]) : null;
+
+                        if(easting && northing && !isNaN(easting) && !isNaN(northing)) {
+                            try {
+                                // proj4("소스좌표계", "목적지좌표계", [X, Y]) -> [경도(Lon), 위도(Lat)] 반환
+                                const transformed = proj4("EPSG:5186", "EPSG:4326", [easting, northing]);
+                                lon = transformed[0];
+                                lat = transformed[1];
+                            } catch(e) {
+                                console.error("좌표 변환 실패:", row);
+                            }
+                        }
+
+                        tr.onclick = () => onRowClick(lat, lon, index);
+
+                        // 인덱스 열
+                        const tdIndex = document.createElement('td');
+                        tdIndex.className = 'px-4 py-2 text-gray-500 border-b border-gray-100 font-mono text-xs';
+                        tdIndex.innerText = index + 1;
+                        tr.appendChild(tdIndex);
+
+                        // 데이터 열
+                        headers.forEach(header => {
+                            const td = document.createElement('td');
+                            td.className = 'px-4 py-2 text-gray-800 border-b border-gray-100';
+                            td.innerText = row[header] || '-';
+                            tr.appendChild(td);
+                        });
+                        
+                        tbody.appendChild(tr);
+                        tableRows.push(tr);
+
+                        // 지도에 붉은색 마커 추가
+                        if (lat && lon) {
+                            const marker = L.circleMarker([lat, lon], {
+                                radius: 5,
+                                fillColor: "#ef4444",
+                                color: "#991b1b",
+                                weight: 1,
+                                opacity: 1,
+                                fillOpacity: 0.7
+                            }).addTo(map);
+
+                            const tooltipContent = `<b>No. ${index + 1}</b><br>클릭하여 상세 정보 보기`;
+                            marker.bindTooltip(tooltipContent);
+                            marker.on('click', () => {
+                                onRowClick(lat, lon, index);
+                            });
+                            
+                            markers.push(marker);
+                        }
+                    });
+
+                    // 마커가 표시된 영역으로 지도 바운더리 자동 조절
+                    if(markers.length > 0) {
+                        const group = new L.featureGroup(markers);
+                        map.fitBounds(group.getBounds(), { padding: [30, 30] });
+                    }
+                },
+                error: function(err) {
+                    alert("데이터를 불러오는데 실패했습니다: " + err.message);
+                    document.getElementById('loading').style.display = 'none';
+                }
+            });
+        }
+
+        window.onload = () => {
+            initMap();
+            loadData();
+        };
+
+    </script>
+</body>
+</html>
